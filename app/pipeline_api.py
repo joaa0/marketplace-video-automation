@@ -329,3 +329,33 @@ def render_detail(render_id: str):
             raise HTTPException(404, 'Vídeo não encontrado')
         approval = db.execute('SELECT id,reviewer,approved_at FROM approvals WHERE render_id=? AND revoked_at IS NULL', (render_id,)).fetchone()
     return {**dict(row), 'approval': dict(approval) if approval else None, 'publication_enabled': False}
+
+
+class ModelSelectionInput(BaseModel):
+    garment_asset_id: str
+
+
+@router.post('/jobs/{job_id}/select-model')
+def auto_select_model(job_id: str, payload: ModelSelectionInput):
+    from app.model_selector import select_model, SelectionUnavailable
+    from app.pexels import PexelsError
+    garment = asset_for(job_id, payload.garment_asset_id, ('garment',))
+    with connect() as db:
+        audit(db, job_id, 'MODEL_SELECTION_REQUESTED', payload.model_dump())
+    try:
+        report, chosen = select_model(intact(garment).read_bytes())
+    except (SelectionUnavailable, PexelsError) as exc:
+        with connect() as db:
+            audit(db, job_id, 'MODEL_SELECTION_UNAVAILABLE', {'reason': str(exc)})
+        raise HTTPException(503, str(exc)) from exc
+    if chosen:
+        score, photo, image, assessment = chosen
+        asset = save_asset(job_id, 'model', image, photo['url'],
+                           'PENDENTE: referência Pexels; autorização publicitária e edição não verificadas',
+                           {'pexels': photo, 'selection': assessment, 'selection_score': score,
+                            'matched_garment_id': garment['id'], 'rights_review_required': True})
+        report['selected_asset_id'] = asset['id']
+        report['selected_photo'] = photo
+    with connect() as db:
+        audit(db, job_id, 'MODEL_SELECTION_COMPLETED', report)
+    return report

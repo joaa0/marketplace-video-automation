@@ -44,3 +44,7 @@ O script fica disponível para execução em um ambiente com Playwright/Chromium
 ## Próximo aceite necessário
 
 Validar o painel em navegador real, repetir o fluxo com materiais autorizados do produto e executar os serviços externos nas contas corretas. Só depois avançar para declarar essas integrações operacionais. O roadmap mantém critérios adicionais para a entrega do produto final.
+
+## Incremento de seleção contextual — 24/10/2026
+
+Suíte ampliada: **39 testes passaram** (9,16 s). A sintaxe JavaScript do painel e `git diff --check` também passaram. Foram adicionados casos para incompatibilidade de inverno com shorts, artificialidade, enquadramento ruim, baixa confiança, comparação de alternativas, segunda busca, duplicatas, ausência de candidata, restrição do domínio de download, contrato multimodal e persistência da seleção/origem. As respostas do Pexels e do avaliador foram simuladas com imagens sintéticas: não houve julgamento real de fotos de modelos nem chamada paga. O painel visual segue sem E2E em Chromium; o smoke offline agora desativa explicitamente a seleção externa para evitar chamadas pagas.

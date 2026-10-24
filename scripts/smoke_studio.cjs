@@ -23,6 +23,7 @@ const assert = require('node:assert/strict');
     const job=await page.locator('#jobs').inputValue();
     await page.locator('#source').fill('Imagem sintética de teste');
     await page.locator('#rights').fill('Fixture sintética sem pessoa, não publicar');
+    await page.locator('#autoSelect').uncheck(); // offline rendering smoke, no paid service calls
     await page.locator('#file').setInputFiles(fixture);
     await page.locator('#upload button').click();
     await page.getByText('Mídia validada e registrada.').waitFor();

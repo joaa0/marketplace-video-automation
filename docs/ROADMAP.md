@@ -41,3 +41,12 @@ O objetivo continua sendo o produto completo. Os itens abaixo distinguem impleme
 ## Critérios para publicação
 
 Aprovação explícita e ativa; direitos conferidos; SKU preservado; preço e disponibilidade atuais; conta e destino corretos; mídia íntegra; credenciais protegidas; nenhuma duplicação quando o resultado de uma publicação for desconhecido.
+
+## Incremento: seleção contextual no Pexels
+
+- [x] Perfil visual da peça e consultas por contexto.
+- [x] Comparação de candidatas por naturalidade, cenário/clima, enquadramento e oclusões.
+- [x] Notas mínimas, confiança, rejeição e intervenção quando nenhuma candidata atende.
+- [x] Acionamento automático no painel ao enviar a peça e registro de origem/justificativas.
+- [ ] Aceitação real do Pexels e do avaliador multimodal com peças e fotos reais.
+- [ ] Encadear seleção, edição, geração de vídeo e renderização em uma execução persistente única.

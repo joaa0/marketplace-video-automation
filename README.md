@@ -171,3 +171,17 @@ Os testes de mídia usam **FFmpeg/ffprobe de verdade**. A suíte verifica imagen
 Há também um teste opcional de navegador em `scripts/smoke_studio.cjs`. Ele exige Node, Playwright e Chromium instalados e uma API/worker isolados com dados sintéticos. Rode com `MVA_URL`, `MVA_KEY` e o caminho de uma imagem sintética. Não o execute sobre dados de uso real: ele cria um produto, renderiza, aprova, exporta e revoga uma fixture.
 
 Para entender o funcionamento interno, leia [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). O resultado e os limites dos testes desta entrega estão em [docs/VALIDATION.md](docs/VALIDATION.md).
+
+## Seleção automática de modelos por compatibilidade visual
+
+Ao enviar uma foto como **Foto do produto / roupa**, o painel agora pode iniciar automaticamente a seleção no Pexels (opção marcada por padrão). Você também pode usar **Buscar e escolher modelo** para repetir a seleção de uma peça existente.
+
+Configure `PEXELS_API_KEY`, `GEMINI_API_KEY` e `GEMINI_VISION_MODEL`, e reinicie a API. O avaliador precisa aceitar imagens e saída JSON estruturada. O servidor usa esse modelo visual para operar sozinho; ele não contém uma sessão persistente do Codex. Sem configuração, a peça continua salva e o painel informa que a seleção está pendente.
+
+A seleção analisa primeiro a peça e prepara consultas contextualizadas. Busca até duas rodadas de três fotos, remove duplicatas e compara visualmente a peça com cada candidata. Avalia naturalidade, compatibilidade de clima/cenário/ocasião, enquadramento e viabilidade da substituição. Todos os critérios e a confiança precisam atingir 0,80, sem rejeição explícita. Exemplo de rejeição: shorts de verão com cenário de neve ou roupas pesadas de inverno; também rejeita artificialidade, área da peça escondida e oclusões.
+
+As notas são estimativas do avaliador, não probabilidades calibradas nem garantia de fidelidade. Se não houver candidata adequada, retorna `NEEDS_OPERATOR`; não escolhe automaticamente uma foto ruim só por ela ser a melhor disponível. A origem, autoria, notas e justificativas ficam registradas na mídia e na auditoria. A referência dos direitos permanece **pendente de revisão**, não autorizada automaticamente.
+
+A API equivalente é `POST /jobs/{job_id}/select-model`, com `{"garment_asset_id":"ID_DA_PECA"}`. Ela entrega o ID da modelo selecionada para as próximas etapas. Esta mudança automatiza a **seleção**, sem ligar ainda todo o restante do pipeline a um único envio. São no máximo sete chamadas visuais por execução; pode haver cobrança pelo provedor e não há repetição automática de chamadas com resultado desconhecido.
+
+Testes desta seleção usam imagens sintéticas e respostas externas simuladas; a busca e o julgamento visual com uma conta real ainda precisam ser validados. Referências técnicas: [Pexels API](https://www.pexels.com/api/documentation/) e [Gemini com saída estruturada](https://ai.google.dev/gemini-api/docs/generate-content/structured-output).
