@@ -161,3 +161,45 @@ def test_auth_is_required_on_new_routes(operator):
     operator.headers.clear()
     for url in ('/jobs', '/assets/x/file', '/tasks/x', '/renders/x/export', '/flow-requests/x/package'):
         assert operator.get(url).status_code == 401
+
+
+@pytest.mark.parametrize('field,new_value', [('caption', 'Outra legenda'), ('destination', 'OUTRO'), ('account_id', 'outra-conta')])
+def test_export_rejects_metadata_changed_after_approval(operator, field, new_value):
+    job = create_job(operator)
+    asset = upload(operator, job)
+    render_id = finish(operator, queue_render(operator, job, asset['id']))
+    assert operator.post(f'/renders/{render_id}/approve', json=CHECKS).status_code == 200
+    with connect() as db:
+        # Fixed field names from the test parametrization; no user-provided SQL.
+        db.execute(f'UPDATE renders SET {field}=? WHERE id=?', (new_value, render_id))
+    assert operator.get(f'/renders/{render_id}/export').status_code == 409
+
+
+def test_export_rejects_video_changed_after_approval(operator):
+    job = create_job(operator)
+    asset = upload(operator, job)
+    render_id = finish(operator, queue_render(operator, job, asset['id']))
+    assert operator.post(f'/renders/{render_id}/approve', json=CHECKS).status_code == 200
+    with connect() as db:
+        path = Path(db.execute('SELECT uri FROM renders WHERE id=?', (render_id,)).fetchone()['uri'])
+    path.write_bytes(b'corrupt')
+    assert operator.get(f'/renders/{render_id}/export').status_code == 409
+    assert operator.get(f'/renders/{render_id}/file').status_code == 409
+
+
+def test_render_registration_rejects_outside_root(operator, tmp_path):
+    job = create_job(operator)
+    outside = tmp_path / 'outside.mp4'
+    outside.write_bytes(b'not-relevant')
+    response = operator.post('/renders', json={'job_id': job, 'file_path': str(outside),
+                             'caption': 'x', 'destination': 'x', 'account_id': 'x'})
+    assert response.status_code == 400
+
+
+def test_transparency_gets_white_background():
+    from PIL import Image
+    output = io.BytesIO()
+    Image.new('RGBA', (300, 300), (0, 0, 0, 0)).save(output, 'PNG')
+    data, _ = normalize_image(output.getvalue())
+    with Image.open(io.BytesIO(data)) as image:
+        assert image.getpixel((0, 0)) == (255, 255, 255)

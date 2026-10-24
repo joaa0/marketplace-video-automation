@@ -298,3 +298,34 @@ def export_render(render_id: str):
             archive.writestr('LEIA-ME.txt', f'Publicação manual: {row["destination"]}, conta {row["account_id"]}.\nConfira preço e estoque no momento de publicar.\n')
         audit(db, row['job_id'], 'EXPORT_CREATED', {'render_id': render_id, 'approval_id': approval['id']})
     return zip_response(output.getvalue(), f'publicacao-{render_id}.zip')
+
+
+@router.get('/jobs/{job_id}/renders')
+def list_renders(job_id: str):
+    job_exists(job_id)
+    with connect() as db:
+        return [dict(r) for r in db.execute('SELECT id,sha256,caption,destination,account_id,created_at FROM renders WHERE job_id=? ORDER BY rowid DESC', (job_id,))]
+
+
+@router.get('/jobs/{job_id}/tasks')
+def list_tasks(job_id: str):
+    job_exists(job_id)
+    with connect() as db:
+        return [dict(r) for r in db.execute('SELECT * FROM tasks WHERE job_id=? ORDER BY rowid DESC LIMIT 100', (job_id,))]
+
+
+@router.get('/jobs/{job_id}/flow-requests')
+def list_flow_requests(job_id: str):
+    job_exists(job_id)
+    with connect() as db:
+        return [dict(r) for r in db.execute('SELECT * FROM flow_requests WHERE job_id=? ORDER BY rowid DESC', (job_id,))]
+
+
+@router.get('/renders/{render_id}')
+def render_detail(render_id: str):
+    with connect() as db:
+        row = db.execute('SELECT id,job_id,sha256,caption,destination,account_id,created_at FROM renders WHERE id=?', (render_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Vídeo não encontrado')
+        approval = db.execute('SELECT id,reviewer,approved_at FROM approvals WHERE render_id=? AND revoked_at IS NULL', (render_id,)).fetchone()
+    return {**dict(row), 'approval': dict(approval) if approval else None, 'publication_enabled': False}

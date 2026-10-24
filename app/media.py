@@ -84,11 +84,12 @@ def normalize_image(data):
                     raise ValueError('Use JPEG, PNG ou WebP estático')
                 if min(source.size) < 256:
                     raise ValueError('Imagem precisa ter pelo menos 256 pixels em cada dimensão')
-                picture = ImageOps.exif_transpose(source).convert('RGB')
+                picture = ImageOps.exif_transpose(source).convert('RGBA')
                 picture.thumbnail((2160, 2160))
                 # Fresh pixels discard EXIF/GPS and arbitrary embedded metadata.
                 clean = Image.new('RGB', picture.size)
-                clean.paste(picture)
+                clean.paste('white', (0, 0, clean.width, clean.height))
+                clean.paste(picture, mask=picture.getchannel('A'))
                 output = io.BytesIO()
                 clean.save(output, 'PNG')
                 return output.getvalue(), {'width': clean.width, 'height': clean.height}

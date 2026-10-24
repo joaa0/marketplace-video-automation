@@ -14,3 +14,12 @@ def test_create_product_and_job(tmp_path, monkeypatch):
         assert response.status_code == 201
         assert client.get('/jobs/' + response.json()['id'], headers=headers).json()['status'] == 'NEW'
         assert client.post('/jobs', headers=headers, json={'product_id':'missing'}).status_code == 404
+
+
+def test_studio_is_available_without_disclosing_credentials():
+    with TestClient(app) as client:
+        response = client.get('/')
+    assert response.status_code == 200
+    assert '<html lang="pt-BR">' in response.text
+    assert 'localStorage' not in response.text
+    assert 'frame-ancestors' in response.headers['Content-Security-Policy']

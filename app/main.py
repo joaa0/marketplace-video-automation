@@ -27,7 +27,7 @@ def now():
 def require_operator(x_operator_key: str | None = Header(default=None)):
     import hmac
     key = os.getenv('OPERATOR_API_KEY', '')
-    if not key or not x_operator_key or not hmac.compare_digest(key, x_operator_key):
+    if not key or not x_operator_key or not hmac.compare_digest(key.encode(), x_operator_key.encode()):
         raise HTTPException(status_code=401, detail='Chave de operador inválida ou não configurada')
 
 
@@ -59,7 +59,7 @@ class ApprovalInput(BaseModel):
 
 @app.get('/health')
 def health():
-    return {'status': 'ok', 'phase': 'core-approval', 'production_ready': False}
+    return {'status': 'ok', 'phase': 'media-render-export', 'production_ready': False, 'publication_enabled': False}
 
 
 @app.post('/products', status_code=201, dependencies=[Depends(require_operator)])
@@ -159,3 +159,9 @@ def find_model_photos(query: str = 'fashion model full body', per_page: int = 10
 
 from app.pipeline_api import router
 app.include_router(router, dependencies=[Depends(require_operator)])
+
+
+@app.get('/', include_in_schema=False)
+def studio():
+    from fastapi.responses import FileResponse
+    return FileResponse(Path(__file__).parent / 'static' / 'index.html', headers={'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'", 'Cache-Control': 'no-store'})
