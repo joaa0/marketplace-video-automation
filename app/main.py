@@ -1,4 +1,6 @@
+from app import config  # load local .env before reading configuration
 import hashlib
+from contextlib import asynccontextmanager
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +11,13 @@ from pydantic import BaseModel, Field
 from app.db import connect, init_db
 from app.pexels import search_models, PexelsError
 
-app = FastAPI(title='Marketplace Video Automation', version='0.2.0')
+@asynccontextmanager
+async def lifespan(app):
+    init_db()
+    yield
+
+
+app = FastAPI(title='Marketplace Video Automation', version='0.3.0', lifespan=lifespan)
 
 
 def now():
@@ -42,12 +50,11 @@ class RenderInput(BaseModel):
 
 
 class ApprovalInput(BaseModel):
-    reviewer: str = Field(min_length=1)
-
-
-@app.on_event('startup')
-def startup():
-    init_db()
+    reviewer: str = Field(min_length=1, max_length=200)
+    sku_verified: bool = False
+    rights_verified: bool = False
+    caption_verified: bool = False
+    price_availability_verified: bool = False
 
 
 @app.get('/health')
@@ -90,7 +97,12 @@ def register_render(payload: RenderInput):
     path = Path(payload.file_path).resolve()
     if not path.is_relative_to(root) or not path.is_file() or path.suffix.lower() != '.mp4':
         raise HTTPException(400, 'MP4 não encontrado no diretório autorizado')
-    sha = hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
+    from app.media import digest, probe
+    try:
+        probe(path, final=True)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    sha = digest(path)
     render_id = str(uuid4())
     with connect() as db:
         job = db.execute('SELECT id FROM jobs WHERE id=?', (payload.job_id,)).fetchone()
@@ -105,14 +117,22 @@ def register_render(payload: RenderInput):
 
 @app.post('/renders/{render_id}/approve', dependencies=[Depends(require_operator)])
 def approve_render(render_id: str, payload: ApprovalInput):
+    if not all((payload.sku_verified, payload.rights_verified, payload.caption_verified, payload.price_availability_verified)):
+        raise HTTPException(422, 'Confirme SKU, direitos de uso, legenda, preço e disponibilidade após revisar o vídeo')
     with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
         render = db.execute('SELECT * FROM renders WHERE id=?', (render_id,)).fetchone()
         if not render:
             raise HTTPException(404, 'Vídeo não encontrado')
         latest = db.execute('SELECT id FROM renders WHERE job_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1', (render['job_id'],)).fetchone()
         if latest['id'] != render_id:
             raise HTTPException(409, 'Existe uma versão mais recente')
-        path = Path(render['uri'])
+        from app.media import safe_path, probe
+        try:
+            path = safe_path(render['uri'], Path(os.getenv('RENDER_ROOT', 'data/renders')))
+            probe(path, final=True)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         if not path.is_file():
             raise HTTPException(409, 'Arquivo indisponível')
         with path.open('rb') as f:
@@ -125,7 +145,7 @@ def approve_render(render_id: str, payload: ApprovalInput):
         approval_id = str(uuid4())
         db.execute('INSERT INTO approvals VALUES (?,?,?,?,?,?,?,?,NULL)', (approval_id, render_id, payload.reviewer, now(), render['sha256'], render['destination'], render['account_id'], render['caption']))
         db.execute("UPDATE jobs SET status='APPROVED' WHERE id=?", (render['job_id'],))
-        db.execute('INSERT INTO audit_events VALUES (?,?,?,?,?,?)', (str(uuid4()), render['job_id'], 'APPROVED', payload.reviewer, now(), approval_id))
+        db.execute('INSERT INTO audit_events VALUES (?,?,?,?,?,?)', (str(uuid4()), render['job_id'], 'APPROVED', payload.reviewer, now(), __import__('json').dumps({'approval_id': approval_id, 'checks': payload.model_dump()})))
     return {'approval_id': approval_id, 'status': 'APPROVED', 'publication_enabled': False}
 
 
@@ -135,3 +155,7 @@ def find_model_photos(query: str = 'fashion model full body', per_page: int = 10
         return {'photos': search_models(query, per_page), 'rights_review_required': True}
     except (PexelsError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+from app.pipeline_api import router
+app.include_router(router, dependencies=[Depends(require_operator)])
